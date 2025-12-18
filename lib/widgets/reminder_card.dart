@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import '../models/reminder.dart';
 
 class ReminderCard extends StatelessWidget {
@@ -6,6 +7,7 @@ class ReminderCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onDelete;
   final VoidCallback onTap;
+  final VoidCallback onEdit; // Added edit callback
 
   const ReminderCard({
     Key? key,
@@ -13,6 +15,7 @@ class ReminderCard extends StatelessWidget {
     required this.onToggle,
     required this.onDelete,
     required this.onTap,
+    required this.onEdit, // Required edit parameter
   }) : super(key: key);
 
   @override
@@ -52,22 +55,33 @@ class ReminderCard extends StatelessWidget {
 
                 const SizedBox(width: 8),
 
-                // Pill icon
+                // Pill icon or photo
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFF6B9D), Color(0xFFFF9A56)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: reminder.photoPath == null
+                        ? const LinearGradient(
+                            colors: [Color(0xFFFF6B9D), Color(0xFFFF9A56)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
                     borderRadius: BorderRadius.circular(12),
+                    image: reminder.photoPath != null
+                        ? DecorationImage(
+                            image: FileImage(File(reminder.photoPath!)),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: const Icon(
-                    Icons.medication,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: reminder.photoPath == null
+                      ? const Icon(
+                          Icons.medication,
+                          color: Colors.white,
+                          size: 28,
+                        )
+                      : null,
                 ),
 
                 const SizedBox(width: 16),
@@ -117,6 +131,60 @@ class ReminderCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      if (reminder.repeatType != 'never') ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.repeat,
+                              size: 14,
+                              color: reminder.isEnabled
+                                  ? Colors.blue.shade300
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                reminder.getRepeatText(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: reminder.isEnabled
+                                      ? Colors.blue.shade300
+                                      : Colors.grey,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (reminder.mealTiming != 'none') ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              reminder.isBeforeMeal
+                                  ? Icons.restaurant_menu
+                                  : Icons.restaurant,
+                              size: 14,
+                              color: reminder.isEnabled
+                                  ? Colors.orange.shade400
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              reminder.getMealTimingText(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: reminder.isEnabled
+                                    ? Colors.orange.shade600
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -138,17 +206,9 @@ class ReminderCard extends StatelessWidget {
                           const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
 
-                    // Edit icon
+                    // Edit icon - Now functional!
                     IconButton(
-                      onPressed: () {
-                        // Edit functionality (placeholder)
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('編集機能は後で実装します'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      },
+                      onPressed: onEdit,
                       icon: const Icon(
                         Icons.edit,
                         color: Colors.green,

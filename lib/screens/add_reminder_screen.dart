@@ -4,7 +4,9 @@ import 'dart:io';
 import '../models/reminder.dart';
 
 class AddReminderScreen extends StatefulWidget {
-  const AddReminderScreen({Key? key}) : super(key: key);
+  final Reminder? existingReminder; // Add optional parameter for editing
+
+  const AddReminderScreen({Key? key, this.existingReminder}) : super(key: key);
 
   @override
   State<AddReminderScreen> createState() => _AddReminderScreenState();
@@ -17,12 +19,47 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   String _selectedRepeat = 'never';
   List<int> _selectedDays = [];
   String? _photoPath;
-  bool _isAfterMeal = false;
+  String _mealTiming = 'none'; // 'none', 'before', 'after'
+  int _dosesPerDay = 1; // Keep this for data model compatibility
+  bool _isEditMode = false;
+  String? _reminderId; // Store ID when editing
+
+  @override
+  void initState() {
+    super.initState();
+    // If editing, pre-fill all fields
+    if (widget.existingReminder != null) {
+      _isEditMode = true;
+      final reminder = widget.existingReminder!;
+      _reminderId = reminder.id;
+      _medicineController.text = reminder.medicineName;
+      _photoPath = reminder.photoPath;
+      _mealTiming = reminder.mealTiming;
+      _dosesPerDay = reminder.dosesPerDay;
+      _selectedRepeat = reminder.repeatType;
+      _selectedDays = reminder.customDays ?? [];
+
+      // Parse time string back to TimeOfDay
+      final timeParts = reminder.time.split(':');
+      if (timeParts.length == 2) {
+        _selectedTime = TimeOfDay(
+          hour: int.tryParse(timeParts[0]) ?? TimeOfDay.now().hour,
+          minute: int.tryParse(timeParts[1]) ?? TimeOfDay.now().minute,
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
     _medicineController.dispose();
     super.dispose();
+  }
+
+  // Auto-generate dose times based on count
+  List<String> _generateDoseTimes() {
+    // Always return single time since we removed the multi-dose option
+    return [_selectedTime.format(context)];
   }
 
   Future<void> _selectTime() async {
@@ -56,13 +93,17 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     }
 
     final reminder = Reminder(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _isEditMode
+          ? _reminderId!
+          : DateTime.now().millisecondsSinceEpoch.toString(),
       medicineName: _medicineController.text.trim(),
       time: _selectedTime.format(context),
       repeatType: _selectedRepeat,
       customDays: _selectedRepeat == 'custom' ? _selectedDays : null,
       photoPath: _photoPath,
-      isAfterMeal: _isAfterMeal,
+      mealTiming: _mealTiming,
+      dosesPerDay: _dosesPerDay,
+      doseTimes: _generateDoseTimes(),
     );
 
     Navigator.pop(context, reminder);
@@ -389,9 +430,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'リマインダーを追加',
-                    style: TextStyle(
+                  Text(
+                    _isEditMode ? 'リマインダーを編集' : 'リマインダーを追加',
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF2E7D32),
@@ -643,68 +684,209 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Meal timing checkbox
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3E0),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.orange.shade300,
-                    width: 2,
+              // Meal timing selector
+              Row(
+                children: [
+                  const Icon(Icons.restaurant, color: Colors.orange, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '服用タイミング',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2E7D32),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // None option
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _mealTiming = 'none';
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _mealTiming == 'none'
+                        ? const Color(0xFFE8F5E9)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _mealTiming == 'none'
+                          ? const Color(0xFF66BB6A)
+                          : Colors.grey.shade300,
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _mealTiming == 'none'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: _mealTiming == 'none'
+                            ? const Color(0xFF66BB6A)
+                            : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        '指定なし',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _isAfterMeal,
-                      onChanged: (value) {
-                        setState(() {
-                          _isAfterMeal = value ?? false;
-                        });
-                      },
-                      activeColor: Colors.orange,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+              ),
+              const SizedBox(height: 8),
+
+              // Before meal option (食前)
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _mealTiming = 'before';
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _mealTiming == 'before'
+                        ? const Color(0xFFFFF3E0)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _mealTiming == 'before'
+                          ? Colors.orange.shade300
+                          : Colors.grey.shade300,
+                      width: 2,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.restaurant,
-                                color: Colors.orange.shade700,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '食後のお薬',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange.shade900,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _mealTiming == 'before'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: _mealTiming == 'before'
+                            ? Colors.orange
+                            : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.restaurant_menu,
+                                  color: Colors.orange.shade700,
+                                  size: 18,
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'アラーム時に食事確認をします',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange.shade700,
+                                const SizedBox(width: 8),
+                                Text(
+                                  '食前のお薬',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange.shade900,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 4),
+                            Text(
+                              '食事の30分前に服用',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+              const SizedBox(height: 8),
+
+              // After meal option (食後)
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _mealTiming = 'after';
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _mealTiming == 'after'
+                        ? const Color(0xFFFFF3E0)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _mealTiming == 'after'
+                          ? Colors.orange.shade300
+                          : Colors.grey.shade300,
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _mealTiming == 'after'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: _mealTiming == 'after'
+                            ? Colors.orange
+                            : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.restaurant,
+                                  color: Colors.orange.shade700,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '食後のお薬',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange.shade900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'アラーム時に食事確認をします',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               const SizedBox(height: 32),
 
               // Buttons
@@ -742,9 +924,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        '追加',
-                        style: TextStyle(
+                      child: Text(
+                        _isEditMode ? '更新' : '追加',
+                        style: const TextStyle(
                           fontSize: 16,
                           color: Colors.white,
                           fontWeight: FontWeight.w600,

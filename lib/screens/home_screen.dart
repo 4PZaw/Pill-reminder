@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/reminder.dart';
 import '../widgets/reminder_card.dart';
+import '../services/notification_service.dart';
 import 'add_reminder_screen.dart';
 import 'notification_screen.dart';
 
@@ -14,16 +15,77 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Reminder> reminders = [];
 
-  void _addReminder(Reminder reminder) {
+  void _addReminder(Reminder reminder) async {
     setState(() {
       reminders.add(reminder);
     });
+
+    // Schedule notifications for all doses
+    await NotificationService().scheduleReminderDoses(
+      reminderId: reminder.id,
+      medicineName: reminder.medicineName,
+      doseTimes: reminder.doseTimes,
+      repeatType: reminder.repeatType,
+    );
+
+    // Show confirmation
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${reminder.dosesPerDay}個の通知を設定しました'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
-  void _deleteReminder(String id) {
+  void _updateReminder(Reminder updatedReminder) async {
+    final index = reminders.indexWhere((r) => r.id == updatedReminder.id);
+    if (index != -1) {
+      final oldReminder = reminders[index];
+
+      setState(() {
+        reminders[index] = updatedReminder;
+      });
+
+      // Cancel old notifications
+      await NotificationService().cancelReminderNotifications(
+        oldReminder.id,
+        oldReminder.dosesPerDay,
+      );
+
+      // Schedule new notifications
+      await NotificationService().scheduleReminderDoses(
+        reminderId: updatedReminder.id,
+        medicineName: updatedReminder.medicineName,
+        doseTimes: updatedReminder.doseTimes,
+        repeatType: updatedReminder.repeatType,
+      );
+
+      // Show confirmation
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('リマインダーを更新しました'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  void _deleteReminder(String id) async {
+    final reminder = reminders.firstWhere((r) => r.id == id);
+
     setState(() {
       reminders.removeWhere((reminder) => reminder.id == id);
     });
+
+    // Cancel all notifications for this reminder
+    await NotificationService().cancelReminderNotifications(
+      id,
+      reminder.dosesPerDay,
+    );
   }
 
   void _toggleReminder(String id) {
@@ -33,6 +95,20 @@ class _HomeScreenState extends State<HomeScreen> {
         reminders[index].isEnabled = !reminders[index].isEnabled;
       }
     });
+  }
+
+  void _editReminder(Reminder reminder) async {
+    final updatedReminder = await showModalBottomSheet<Reminder>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddReminderScreen(
+        existingReminder: reminder, // Pass existing reminder for editing
+      ),
+    );
+    if (updatedReminder != null) {
+      _updateReminder(updatedReminder);
+    }
   }
 
   @override
@@ -178,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
           reminder: reminders[index],
           onToggle: () => _toggleReminder(reminders[index].id),
           onDelete: () => _deleteReminder(reminders[index].id),
+          onEdit: () => _editReminder(reminders[index]), // Edit callback
           onTap: () {
             Navigator.push(
               context,
